@@ -410,26 +410,27 @@ def _format_md_ref(item):
         path, line = item.find_ref()
         path = path.replace('\\', '/')  # always use unix-style paths
         if line:
-            return "> `{p}` (line {line})".format(p=path, line=line)
+            return "> `{ref} : {p}` (line {line})".format(ref=item.ref, p=path, line=line)
         else:
-            return "> `{p}`".format(p=path)
+            return "> `{ref} : {p}`".format(ref=item.ref, p=path)
     else:
         return "> '{r}'".format(r=item.ref)
 
 def _format_md_refs(item):
     """Format an external references in Markdown."""
-    if settings.CHECK_REF:
-        res = ""
-        for ref in item.refs:
+    res = ""
+    for ref in item.refs:
+        if settings.CHECK_REF:
             path, line = item.find_ref(ref)
             path = path.replace('\\', '/')  # always use unix-style paths
             if line:
-                res += "> `{p}` (line {line})".format(p=path, line=line)
+                res += "> `{r} : {p}` (line {line})".format(r=ref, p=path, line=line)
             else:
-                res += "> `{p}`".format(p=path)
-        return res
-    else:
-        return "> '{r}'".format(r=item.ref)
+                res += "> `{r} : {p}`\n".format(r=ref,p=path)
+        else:
+            res += "> '{r}'\n".format(r=ref)
+        res +="\n>\n"
+    return res
 
 
 def _format_md_links(items, linkify):
