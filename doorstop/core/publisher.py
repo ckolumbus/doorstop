@@ -269,6 +269,14 @@ def _lines_text(obj, indent=8, width=79, **_):
                 ref = _format_text_ref(item)
                 yield from _chunks(ref, width, indent)
 
+            # References
+            # TODO: adjust for correct formatting of listof references
+            if item.refs:
+                yield ""  # break before references
+                label = "Refs: "
+                slinks = label + ', '.join(l for l in item.refs)
+                yield from _chunks(refs, width, indent)
+
             # Links
             if item.links:
                 yield ""  # break before links
@@ -351,6 +359,12 @@ def _lines_markdown(obj, **kwargs):
                 yield ""  # break before reference
                 yield _format_md_ref(item)
 
+            # References
+            if item.refs:
+                yield ""  # break before reference
+                label = "Refs:"
+                yield _format_md_refs(item)
+
             # Parent links
             if item.links:
                 yield ""  # break before links
@@ -411,6 +425,21 @@ def _format_md_ref(item):
             return "> `{p}` (line {line})".format(p=path, line=line)
         else:
             return "> `{p}`".format(p=path)
+    else:
+        return "> '{r}'".format(r=item.ref)
+
+def _format_md_refs(item):
+    """Format an external references in Markdown."""
+    if settings.CHECK_REF:
+        res = ""
+        for ref in item.refs:
+            path, line = item.find_ref(ref)
+            path = path.replace('\\', '/')  # always use unix-style paths
+            if line:
+                res += "> `{p}` (line {line})".format(p=path, line=line)
+            else:
+                res += "> `{p}`".format(p=path)
+        return res
     else:
         return "> '{r}'".format(r=item.ref)
 

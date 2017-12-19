@@ -137,7 +137,7 @@ def _tabulate(obj, sep=LIST_SEP, auto=False):
 
         # Yield header
         if yield_header:
-            header = ['level', 'text', 'ref', 'links']
+            header = ['level', 'text', 'ref', 'refs', 'links']
             for value in sorted(data.keys()):
                 if value not in header:
                     header.append(value)
@@ -151,6 +151,9 @@ def _tabulate(obj, sep=LIST_SEP, auto=False):
             if key == 'level':
                 # some levels are floats for YAML presentation
                 value = str(value)
+            elif key == 'refs':
+                # separate identifiers with a delimiter
+                value = sep.join(element for element in item.refs)
             elif key == 'links':
                 # separate identifiers with a delimiter
                 value = sep.join(uid.string for uid in item.links)
