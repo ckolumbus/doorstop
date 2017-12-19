@@ -253,6 +253,9 @@ def _itemize(header, data, document, mapping=None):
             # Convert values for particular keys
             if key in ('uid', 'id'):  # 'id' for backwards compatibility
                 uid = value
+            elif key == 'refs':
+                # split links into a list
+                attrs[key] = _split_list(value)
             elif key == 'links':
                 # split links into a list
                 attrs[key] = _split_list(value)
