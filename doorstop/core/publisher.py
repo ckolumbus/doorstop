@@ -266,12 +266,11 @@ def _lines_text(obj, indent=8, width=79, **_):
                 yield from _chunks(ref, width, indent)
 
             # References
-            # TODO: adjust for correct formatting of listof references
             if item.refs:
                 yield ""  # break before references
-                label = "Refs: "
-                slinks = label + ', '.join(l for l in item.refs)
-                yield from _chunks(refs, width, indent)
+                for ref in  item.refs:
+                    label = _format_text_ref(item, ref)
+                    yield from _chunks(label, width, indent)
 
             # Links
             if item.links:
@@ -391,17 +390,20 @@ def _format_md_attr_list(item, linkify):
     return " {{#{u} }}".format(u=item.uid) if linkify else ''
 
 
-def _format_text_ref(item):
+def _format_text_ref(item, ref=None):
     """Format an external reference in text."""
+    if not ref:
+        ref = item.ref
+
     if settings.CHECK_REF:
-        path, line = item.find_ref()
+        path, line = item.find_ref(ref)
         path = path.replace('\\', '/')  # always use unix-style paths
         if line:
             return "Reference: {p} (line {line})".format(p=path, line=line)
         else:
             return "Reference: {p}".format(p=path)
     else:
-        return "Reference: '{r}'".format(r=item.ref)
+        return "Reference: '{r}'".format(r=ref)
 
 
 def _format_md_ref(item):
