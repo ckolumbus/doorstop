@@ -58,6 +58,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
     DEFAULT_REVIEWED = Stamp()
     DEFAULT_TEXT = Text()
     DEFAULT_REF = ""
+    DEFAULT_REFVERSION = ""
 
     def __init__(self, path, root=os.getcwd(), **kwargs):
         """Initialize an item from an existing file.
@@ -90,6 +91,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         self.auto = kwargs.get('auto', Item.auto)
         # Set default values
         self._data['level'] = Item.DEFAULT_LEVEL
+        self._data['refversion'] = Item.DEFAULT_REFVERSION
         self._data['active'] = Item.DEFAULT_ACTIVE
         self._data['normative'] = Item.DEFAULT_NORMATIVE
         self._data['derived'] = Item.DEFAULT_DERIVED
@@ -172,6 +174,8 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 value = Stamp(value)
             elif key == 'text':
                 value = Text(value)
+            elif key == 'refversion':
+                value = value.strip()
             elif key == 'ref':
                 value = value.strip()
             elif key == 'refs':
@@ -211,6 +215,8 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 value = value.yaml
             elif key == 'text':
                 value = value.yaml
+            elif key == 'refversion':
+                value = value.strip()
             elif key == 'ref':
                 value = value.strip()
             elif key == 'refs':
@@ -397,6 +403,23 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
     def text(self, value):
         """Set the item's text."""
         self._data['text'] = Text(value)
+
+    @property
+    @auto_load
+    def refversion(self):
+        """Get the item's explicit version.
+
+        Used within external references to denote a concrete
+        verion of the requirement.
+        """
+        return self._data['refversion']
+
+    @refversion.setter
+    @auto_save
+    @auto_load
+    def refversion(self, value):
+        """Set the item's explicit version."""
+        self._data['refversion'] = str(value) if value else ""
 
     @property
     @auto_load
@@ -725,7 +748,23 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             return None
 
         log.info("checking external reference list")
-        return [self.find_ref(ref) for ref in self.refs]
+        # TODO: make more pythonic?
+        errorMsg = "";
+        result  = []
+        for ref in self.refs:
+            if self.refversion != "":
+                ref += "_" + self.refversion
+            try:
+                extref = self.find_ref(ref)
+                log.info(extref)
+                result.append(extref)
+            except Exception as e:
+                errorMsg += "\n"+str(e)
+
+        if errorMsg !="":
+            raise DoorstopError(errorMsg)
+
+        return result
 
     @requires_tree
     def find_ref(self, ref=None):
@@ -757,6 +796,62 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         log.trace("regex: {}".format(pattern))
         regex = re.compile(pattern)
         for path, filename, relpath in self.tree.vcs.paths:
+            relpath = relpath.replace('\\', '/')  # always use unix-style paths
+            log.debug("checking path: {}, filename: {}, relpath: {}".format(path, filename, relpath))
+            # Skip the item's file while searching
+            if path == self.path:
+                continue
+            # Check for a matching path
+            if relpath.endswith(ref):
+                return relpath, None
+            # Skip extensions that should not be considered text
+            if os.path.splitext(filename)[-1] in settings.SKIP_EXTS:
+                continue
+            # Search for the reference in the file
+            lines = pyficache.getlines(path)
+            if lines is None:
+                log.trace("unable to read lines from: {}".format(path))
+                continue
+            for lineno, line in enumerate(lines, start=1):
+                if regex.search(line):
+                    log.debug("found ref: {}".format(relpath))
+                    return relpath, lineno
+
+        msg = "external reference not found: {}".format(ref)
+        raise DoorstopError(msg)
+
+
+    @requires_tree
+    def find_ref(self, ref=None):
+        """Get the external file reference and line number.
+
+        :raises: :class:`~doorstop.common.DoorstopError` when no
+            reference is found
+
+        :return: relative path to file or None (when no reference
+            set),
+            line number (when found in file) or None (when found as
+            filename) or None (when no reference set)
+
+        """
+
+        if not ref:
+            ref = self.ref
+
+        # Return immediately if no external reference
+        if not ref:
+            log.debug("no external reference to search for")
+            return None, None
+        # Update the cache
+        if not settings.CACHE_PATHS:
+            pyficache.clear_file_cache()
+        # Search for the external reference
+        log.debug("seraching for ref '{}'...".format(ref))
+        pattern = r"(\b|\W){}(\b|\W)".format(re.escape(ref))
+        log.trace("regex: {}".format(pattern))
+        regex = re.compile(pattern)
+        for path, filename, relpath in self.tree.vcs.paths:
+            relpath = relpath.replace('\\', '/')  # always use unix-style paths
             log.debug("checking path: {}, filename: {}, relpath: {}".format(path, filename, relpath))
             # Skip the item's file while searching
             if path == self.path:
