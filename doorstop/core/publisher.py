@@ -270,7 +270,7 @@ def _lines_text(obj, indent=8, width=79, **_):
                 yield from _chunks(ref, width, indent)
 
             # References
-            if item.refs:
+            if item.document.hashrefs_enabled and item.refs:
                 yield ""  # break before references
                 for ref in  item.refs:
                     label = _format_text_ref(item, ref)
@@ -359,7 +359,7 @@ def _lines_markdown(obj, **kwargs):
                 yield _format_md_ref(item)
 
             # References
-            if item.refs:
+            if item.document.hashrefs_enabled and item.refs:
                 yield ""  # break before reference
                 label = "Refs:"
                 yield _format_md_refs(item)
@@ -435,7 +435,7 @@ def _format_md_refs(item):
     res = ""
     for ref in item.refs:
         if settings.CHECK_REF:
-            path, line = item.find_ref(ref)
+            path, line, _ = item.find_refhash(ref)
             path = path.replace('\\', '/')  # always use unix-style paths
             if line:
                 res += "> `{r} : {p}` (line {line})".format(r=ref, p=path, line=line)
