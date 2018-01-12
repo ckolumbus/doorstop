@@ -794,8 +794,6 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
 
         result = []
         for ref in self.refs:
-            if self.refversion != "":
-                ref += "_" + self.refversion
             try:
                 extref = self.find_refhash(ref)
                 result.append(extref)
@@ -895,11 +893,17 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         # Update the cache
         if not settings.CACHE_PATHS:
             pyficache.clear_file_cache()
+
+
+        refname_start = refname_end = ref.value
+        if self.refversion:
+            refname_start += "_" + self.refversion
+
         # Search for the external reference
-        log.debug("seraching for ref '{}'...".format(ref.value))
-        pattern_start = r"(^|\b|\W)<{}>(\b|\W)".format(re.escape(ref.value))
-        pattern_end = r"(^|\b|\W)</{}>(\b|\W)".format(re.escape(ref.value))
-        pattern_closed = r"(^|\b|\W)<{}\s+/>(\b|\W)".format(re.escape(ref.value))
+        log.debug("seraching for ref '{}'...".format(refname_start))
+        pattern_start = r"(^|\b|\W)<{}>(\b|\W)".format(re.escape(refname_start))
+        pattern_end = r"(^|\b|\W)</{}>(\b|\W)".format(re.escape(refname_end))
+        pattern_closed = r"(^|\b|\W)<{}\s+/>(\b|\W)".format(re.escape(refname_start))
         log.trace("regex start : {}".format(pattern_start))
         log.trace("regex end   : {}".format(pattern_end))
         log.trace("regex closed: {}".format(pattern_closed))
@@ -927,30 +931,30 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 # no start found yet
                 if not pattern_find_start_line:
                     if regex_closed.search(line):
-                        log.debug("found ref closed for '{}' in {}:{}".format(ref,relpath,lineno))
+                        log.debug("found ref closed for '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = pattern_find_end_line = lineno
 
                     if regex_start.search(line):
-                        log.debug("found ref start '{}' in {}:{}".format(ref,relpath,lineno))
+                        log.debug("found ref start '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = lineno
 
                 # start pattern found, not implemented as else because
                 if pattern_find_start_line:
                     if regex_end.search(line):
-                        log.debug("found ref end '{}' in {}:{}".format(ref,relpath,lineno))
+                        log.debug("found ref end '{}' in {}:{}".format(refname_end,relpath,lineno))
                         pattern_find_end_line = lineno
 
                 if pattern_find_start_line:
                     pattern_find_content += line
 
                 if pattern_find_start_line and pattern_find_end_line:
-                    log.debug("found '{}' in {}:{} with content : \"{}\"".format(ref, relpath, lineno, pattern_find_content))
+                    log.debug("found '{}' in {}:{} with content : \"{}\"".format(refname_start, relpath, lineno, pattern_find_content))
                     return relpath, pattern_find_start_line, Stamp(Stamp.digest(pattern_find_content))
 
             if pattern_find_start_line and not pattern_find_end_line:
-                raise DoorstopError("Stop pattern for reference '{}' not found".format(ref))
+                raise DoorstopError("Stop pattern for reference '{}' not found".format(refname_start))
 
-        msg = "external hash reference not found: {}".format(ref)
+        msg = "external hash reference not found: {}".format(refname_start)
         raise DoorstopError(msg)
 
     def find_child_links(self, find_all=True):
@@ -1073,7 +1077,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
     def reviewref(self, refname=None):
         """Mark the refs as reviewed."""
         if not self.document.hashrefs_enabled:
-            log.warning("hashrefs not enabeld for this document, nothting to review!")
+            log.warning("hashrefs not enabeld for this document, nothing to review!")
             return
 
         if refname:
