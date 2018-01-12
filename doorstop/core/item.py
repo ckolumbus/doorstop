@@ -91,14 +91,15 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         self.auto = kwargs.get('auto', Item.auto)
         # Set default values
         self._data['level'] = Item.DEFAULT_LEVEL
-        self._data['refversion'] = Item.DEFAULT_REFVERSION
         self._data['active'] = Item.DEFAULT_ACTIVE
         self._data['normative'] = Item.DEFAULT_NORMATIVE
         self._data['derived'] = Item.DEFAULT_DERIVED
         self._data['reviewed'] = Item.DEFAULT_REVIEWED
         self._data['text'] = Item.DEFAULT_TEXT
         self._data['ref'] = Item.DEFAULT_REF
-        self._data['refs'] = set()
+        if self.document.hashrefs_enabled:
+            self._data['refversion'] = Item.DEFAULT_REFVERSION
+            self._data['refs'] = set()
         self._data['links'] = set()
 
     def __repr__(self):
@@ -151,6 +152,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         # Return the item
         return item
 
+    @requires_document
     def load(self, reload=False):
         """Load the item's properties from its file."""
         if self._loaded and not reload:
@@ -174,14 +176,14 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 value = Stamp(value)
             elif key == 'text':
                 value = Text(value)
-            elif key == 'refversion':
-                value = value.strip()
             elif key == 'ref':
                 value = value.strip()
-            elif key == 'refs':
-                value = set(RefStamp(part) for part in value)
             elif key == 'links':
                 value = set(UID(part) for part in value)
+            elif key == 'refversion' and self.document.hashrefs_enabled:
+                value = value.strip()
+            elif key == 'refs' and self.document.hashrefs_enabled:
+                value = set(RefStamp(part) for part in value)
             else:
                 if isinstance(value, str):
                     value = Text(value)
@@ -215,11 +217,11 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 value = value.yaml
             elif key == 'text':
                 value = value.yaml
-            elif key == 'refversion':
-                value = value.strip()
             elif key == 'ref':
                 value = value.strip()
-            elif key == 'refs':
+            elif key == 'refversion' and self.document.hashrefs_enabled:
+                value = value.strip()
+            elif key == 'refs' and self.document.hashrefs_enabled:
                 value = [{str(i): i.stamp.yaml} for i in sorted(value)]
             elif key == 'links':
                 value = [{str(i): i.stamp.yaml} for i in sorted(value)]
@@ -406,19 +408,25 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
 
     @property
     @auto_load
+    @requires_document
     def refversion(self):
         """Get the item's explicit version.
 
         Used within external references to denote a concrete
         verion of the requirement.
         """
+        if not self.document.hashrefs_enabled:
+            raise AttributeError("hasrefs feature not enabled")
         return self._data['refversion']
 
     @refversion.setter
     @auto_save
     @auto_load
+    @requires_document
     def refversion(self, value):
         """Set the item's explicit version."""
+        if not self.document.hashrefs_enabled:
+            raise AttributeError("hasrefs feature not enabled")
         self._data['refversion'] = str(value) if value else ""
 
     @property
@@ -441,15 +449,21 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
 
     @property
     @auto_load
+    @requires_document
     def refs(self):
         """Get a list of external references"""
+        if not self.document.hashrefs_enabled:
+            raise AttributeError("hasrefs feature not enabled")
         return sorted(self._data['refs'])
 
     @refs.setter
     @auto_save
     @auto_load
+    @requires_document
     def refs(self, value):
         """Set the list of external references."""
+        if not sef.document.hashrefs_enabled:
+            raise AttributeError("hasrefs feature not enabled")
         self._data['refs'] = set(RefStamp(v) for v in value)
 
     @property
@@ -588,7 +602,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             except DoorstopError as exc:
                 yield exc
 
-        if settings.CHECK_REF:
+        if settings.CHECK_REF and self.document.hashrefs_enabled:
             yield from self.find_refhashes()
 
         # Check links
@@ -998,7 +1012,9 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
     @auto_load
     def stamp(self, links=False):
         """Hash the item's key content for later comparison."""
-        values = [self.uid, self.text, self.ref, self.refs]
+        values = [self.uid, self.text, self.ref]
+        if self.document.hashrefs_enabled:
+            values.extend(self.refs)
         if links:
             values.extend(self.links)
         return Stamp(*values)
@@ -1026,8 +1042,13 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
 
     @auto_save
     @auto_load
+    @requires_document
     def reviewref(self, refname=None):
         """Mark the refs as reviewed."""
+        if not self.document.hashrefs_enabled:
+            log.warning("hashrefs not enabeld for this document, nothting to review!")
+            return
+
         if refname:
             log.info("marking item ref '{}' as reviewed...".format(refname))
             try:

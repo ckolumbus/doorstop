@@ -52,6 +52,7 @@ class Document(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         self._data['sep'] = Document.DEFAULT_SEP
         self._data['digits'] = Document.DEFAULT_DIGITS
         self._data['parent'] = None  # the root document does not have a parent
+        self._data['hashrefs_enabled'] = False
         self._items = []
         self._itered = False
         self.children = []
@@ -136,6 +137,8 @@ class Document(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                 self._data['parent'] = value.strip()
             elif key == 'digits':
                 self._data['digits'] = int(value)
+            elif key == 'hashrefs_enabled':
+                self._data['hashrefs_enabled'] = bool(value)
         # Set meta attributes
         self._loaded = True
         if reload:
@@ -228,6 +231,12 @@ class Document(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         path = os.path.join(self.path, Document.ASSETS)
         if os.path.isdir(path):
             return path
+
+    @property
+    @auto_load
+    def hashrefs_enabled(self):
+        """Get the whether hashrefs are enabled."""
+        return self._data['hashrefs_enabled']
 
     @property
     @auto_load
