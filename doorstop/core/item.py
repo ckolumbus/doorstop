@@ -936,12 +936,13 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                         log.debug("found ref closed for '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = pattern_find_end_line = lineno
                     elif regex_closed_version.search(line):
-                        log.warning("found ref closed '{} with different version in {}:{}".format(refname_start, relpath, lineno))
+                        raise DoorstopWarning("found ref closed '{} with different version in {}:{}".format(refname_start, relpath, lineno))
+
                     elif regex_start.search(line):
                         log.debug("found ref start '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = lineno
                     elif regex_start_version.search(line):
-                        log.warning("found ref start '{} with different version in {}:{}".format(refname_start, relpath, lineno))
+                        raise DoorstopWarning("found ref start '{} with different version in {}:{}".format(refname_start, relpath, lineno))
 
                 # start pattern found, not implemented as else because
                 if pattern_find_start_line:
