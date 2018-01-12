@@ -87,6 +87,7 @@ def main(args=None):  # pylint: disable=R0915
     _unlink(subs, shared)
     _clear(subs, shared)
     _review(subs, shared)
+    _reviewref(subs, shared)
     _import(subs, shared)
     _export(subs, shared)
     _publish(subs, shared)
@@ -246,6 +247,19 @@ def _review(subs, shared):
     group.add_argument('-d', '--document', action='store_true',
                        help="indicates the 'label' is a document prefix")
 
+def _reviewref(subs, shared):
+    """Configure the `doorstop review` subparser."""
+    info = "absolve items of their unreviewed status"
+    sub = subs.add_parser('reviewref', description=info.capitalize() + '.',
+                          help=info, **shared)
+    sub.add_argument('label', help="item UID, document prefix, or 'all'")
+    sub.add_argument('-r', '--ref',  metavar='REF',
+                       help="name of reference to mark as reviewed (default: all)")
+    group = sub.add_mutually_exclusive_group()
+    group.add_argument('-i', '--item', action='store_true',
+                       help="indicates the 'label' is an item UID")
+    group.add_argument('-d', '--document', action='store_true',
+                       help="indicates the 'label' is a document prefix")
 
 def _import(subs, shared):
     """Configure the `doorstop import` subparser."""

@@ -11,7 +11,7 @@ from doorstop.common import DoorstopError, DoorstopWarning, DoorstopInfo
 from doorstop.core.base import (add_item, edit_item, delete_item,
                                 auto_load, auto_save,
                                 BaseValidatable, BaseFileObject)
-from doorstop.core.types import Prefix, UID, Text, Level, Stamp, to_bool
+from doorstop.core.types import Prefix, RefStamp, UID, Text, Level, Stamp, to_bool
 from doorstop.core import editor
 from doorstop import settings
 
@@ -180,7 +180,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             elif key == 'ref':
                 value = value.strip()
             elif key == 'refs':
-                value = set(element for element in value)
+                value = set(RefStamp(part) for part in value)
             elif key == 'links':
                 value = set(UID(part) for part in value)
             elif key == 'header':
@@ -229,7 +229,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             elif key == 'ref':
                 value = value.strip()
             elif key == 'refs':
-                value = [str(i) for i in sorted(value)]
+                value = [{str(i): i.stamp.yaml} for i in sorted(value)]
             elif key == 'links':
                 value = [{str(i): i.stamp.yaml} for i in sorted(value)]
             elif key == 'reviewed':
@@ -475,7 +475,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
     @auto_load
     def refs(self, value):
         """Set the list of external references."""
-        self._data['refs'] = set(v for v in value)
+        self._data['refs'] = set(RefStamp(v) for v in value)
 
     @property
     @auto_load
@@ -610,9 +610,11 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         if settings.CHECK_REF:
             try:
                 self.find_ref()
-                self.find_refs()
             except DoorstopError as exc:
                 yield exc
+
+        if settings.CHECK_REF:
+            yield from self.find_refhashes()
 
         # Check links
         if not self.normative and self.links:
@@ -755,7 +757,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                         yield DoorstopWarning(msg)
 
     @requires_tree
-    def find_refs(self):
+    def find_refhashes(self):
         """Get the external file references and line number.
 
         :raises: :class:`~doorstop.common.DoorstopError` when no
@@ -773,21 +775,28 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             return None
 
         log.info("checking external reference list")
-        # TODO: make more pythonic?
-        errorMsg = "";
-        result  = []
+
+        result = []
         for ref in self.refs:
             if self.refversion != "":
                 ref += "_" + self.refversion
             try:
-                extref = self.find_ref(ref)
-                log.info(extref)
+                extref = self.find_refhash(ref)
                 result.append(extref)
-            except Exception as e:
-                errorMsg += "\n"+str(e)
 
-        if errorMsg !="":
-            raise DoorstopError(errorMsg)
+                if settings.CHECK_SUSPECT_LINKS:
+                    #if not str(ref.stamp) and settings.STAMP_NEW_LINKS:
+                    #    ref.stamp = extref[2]
+                    #el
+                    if not str(ref.stamp):
+                        msg = "ref hash not reviewed: {} {}:{}".format(ref.value, extref[0], extref[1])
+                        yield DoorstopWarning(msg)
+                    elif ref.stamp != extref[2]:
+                        msg = "suspect ref hash: {} {}:{}".format(ref.value, extref[0], extref[1])
+                        yield DoorstopWarning(msg)
+
+            except DoorstopError as exc:
+                yield exc
 
         return result
 
@@ -817,7 +826,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
             pyficache.clear_file_cache()
         # Search for the external reference
         log.debug("seraching for ref '{}'...".format(ref))
-        pattern = r"(\b|\W){}(\b|\W)".format(re.escape(ref))
+        pattern = r"(^|\b|\W){}(\b|\W)".format(re.escape(ref))
         log.trace("regex: {}".format(pattern))
         regex = re.compile(pattern)
         for path, filename, relpath in self.tree.vcs.paths:
@@ -847,7 +856,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
 
 
     @requires_tree
-    def find_ref(self, ref=None):
+    def find_refhash(self, ref=None):
         """Get the external file reference and line number.
 
         :raises: :class:`~doorstop.common.DoorstopError` when no
@@ -871,33 +880,61 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         if not settings.CACHE_PATHS:
             pyficache.clear_file_cache()
         # Search for the external reference
-        log.debug("seraching for ref '{}'...".format(ref))
-        pattern = r"(\b|\W){}(\b|\W)".format(re.escape(ref))
-        log.trace("regex: {}".format(pattern))
-        regex = re.compile(pattern)
+        log.debug("seraching for ref '{}'...".format(ref.value))
+        pattern_start = r"(^|\b|\W)<{}>(\b|\W)".format(re.escape(ref.value))
+        pattern_end = r"(^|\b|\W)</{}>(\b|\W)".format(re.escape(ref.value))
+        pattern_closed = r"(^|\b|\W)<{}\s+/>(\b|\W)".format(re.escape(ref.value))
+        log.trace("regex start : {}".format(pattern_start))
+        log.trace("regex end   : {}".format(pattern_end))
+        log.trace("regex closed: {}".format(pattern_closed))
+        regex_start  = re.compile(pattern_start)
+        regex_end    = re.compile(pattern_end)
+        regex_closed = re.compile(pattern_closed)
+
         for path, filename, relpath in self.tree.vcs.paths:
             relpath = relpath.replace('\\', '/')  # always use unix-style paths
             log.debug("checking path: {}, filename: {}, relpath: {}".format(path, filename, relpath))
             # Skip the item's file while searching
             if path == self.path:
                 continue
-            # Check for a matching path
-            if relpath.endswith(ref):
-                return relpath, None
-            # Skip extensions that should not be considered text
-            if os.path.splitext(filename)[-1] in settings.SKIP_EXTS:
-                continue
+
             # Search for the reference in the file
             lines = pyficache.getlines(path)
             if lines is None:
                 log.trace("unable to read lines from: {}".format(path))
                 continue
-            for lineno, line in enumerate(lines, start=1):
-                if regex.search(line):
-                    log.debug("found ref: {}".format(relpath))
-                    return relpath, lineno
+            pattern_find_start_line = None
+            pattern_find_end_line   = None
+            pattern_find_content    = ""
 
-        msg = "external reference not found: {}".format(ref)
+            for lineno, line in enumerate(lines, start=1):
+                # no start found yet
+                if not pattern_find_start_line:
+                    if regex_closed.search(line):
+                        log.debug("found ref closed for '{}' in {}:{}".format(ref,relpath,lineno))
+                        pattern_find_start_line = pattern_find_end_line = lineno
+
+                    if regex_start.search(line):
+                        log.debug("found ref start '{}' in {}:{}".format(ref,relpath,lineno))
+                        pattern_find_start_line = lineno
+
+                # start pattern found, not implemented as else because
+                if pattern_find_start_line:
+                    if regex_end.search(line):
+                        log.debug("found ref end '{}' in {}:{}".format(ref,relpath,lineno))
+                        pattern_find_end_line = lineno
+
+                if pattern_find_start_line:
+                    pattern_find_content += line
+
+                if pattern_find_start_line and pattern_find_end_line:
+                    log.debug("found '{}' in {}:{} with content : \"{}\"".format(ref, relpath, lineno, pattern_find_content))
+                    return relpath, pattern_find_start_line, Stamp(Stamp.digest(pattern_find_content))
+
+            if pattern_find_start_line and not pattern_find_end_line:
+                raise DoorstopError("Stop pattern for reference '{}' not found".format(ref))
+
+        msg = "external hash reference not found: {}".format(ref)
         raise DoorstopError(msg)
 
     def find_child_links(self, find_all=True):
@@ -1011,6 +1048,41 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         """Mark the item as reviewed."""
         log.info("marking item as reviewed...")
         self._data['reviewed'] = self.stamp(links=True)
+
+    @auto_save
+    @auto_load
+    def reviewref(self, refname=None):
+        """Mark the refs as reviewed."""
+        if refname:
+            log.info("marking item ref '{}' as reviewed...".format(refname))
+            try:
+                ref = [r for r in self.refs if r.value == refname][0]
+                x =  self.find_refhash(ref)
+                log.debug(" got {}".format(x))
+                ref.stamp = x[2]
+            except:
+                log.error("ref {} not found".format(refname))
+        else:
+            log.info("marking all item refs as reviewed...")
+            for ref in self.refs:
+                log.trace("marking item refs : {} {}".format(ref, type(ref)))
+                try:
+                    x =  self.find_refhash(ref)
+                    log.debug(" got {}".format(x))
+                    ref.stamp = x[2]
+                except:
+                    log.error("ref {} not found".format(ref))
+
+
+
+    def _reviewref_item(self, ref):
+        """review one sinle ref."""
+        try:
+            x =  self.find_refhash(ref)
+            log.debug(" got {}".format(x))
+            ref.stamp = x[2]
+        except:
+            log.warning("ref {} not found".format(ref))
 
     @delete_item
     def delete(self, path=None):
