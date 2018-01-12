@@ -228,6 +228,86 @@ class UID(object):
         """
         return "{}{}{}".format(prefix, sep, str(number).zfill(digits))
 
+class RefStamp(object):
+    """Reference with stamp."""
+
+    def __new__(cls, *args, **kwargs):  # pylint: disable=W0613
+        if args and isinstance(args[0], RefStamp):
+            return args[0]
+        else:
+            return super().__new__(cls)
+
+    def __init__(self, *values, stamp=None):
+        if values and isinstance(values[0], RefStamp):
+            self.stamp = stamp or values[0].stamp
+            return
+        self.stamp = stamp or Stamp()
+        # Join values
+        if len(values) == 0:  # pylint: disable=len-as-condition
+            self.value = ''
+        elif len(values) == 1:
+            value = values[0]
+            if isinstance(value, str) and ':' in value:
+                # split UID:stamp into a dictionary
+                pair = value.rsplit(':', 1)
+                value = {pair[0]: pair[1]}
+            if isinstance(value, dict):
+                pair = list(value.items())[0]
+                self.value = str(pair[0])
+                self.stamp = self.stamp or Stamp(pair[1])
+            else:
+                self.value = str(value) if values[0] else ''
+        else:
+            raise TypeError("__init__() takes 1 or 3 positional arguments")
+
+        self._relpath = None
+        self._lineno = None
+        self._exc = None
+
+    def __repr__(self):
+        if self.stamp:
+            return "RefStamp('{}', stamp='{}')".format(self.value, self.stamp)
+        else:
+            return "RefStamp('{}')".format(self.value)
+
+    def __str__(self):
+        return self.value
+
+    def __hash__(self):
+        return hash((self.value, self._relpath, self._lineno))
+
+    def __eq__(self, other):
+        if not other:
+            return False
+        if not isinstance(other, RefStamp):
+            other = RefStamp(other)
+        return self.value == other.value
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __lt__(self, other):
+        return self.value < other.value
+
+    @property
+    def relpath(self):
+        """relpath to file with reference."""
+        return self._relpath
+
+    @relpath.setter
+    def relpath(self, value):
+        """relpath to file with reference."""
+        self._relpath = value
+
+    @property
+    def lineno(self):
+        """Line number of reference within file."""
+        return self._lineno
+
+    @lineno.setter
+    def lineno(self, value):
+        """relpath to file with reference."""
+        self._lineno = value
 
 class _Literal(str):
     """Custom type for text which should be dumped in the literal style."""

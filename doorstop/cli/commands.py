@@ -355,6 +355,25 @@ def run_review(args, cwd, error, catch=True):
 
     return True
 
+def run_reviewref(args, cwd, error, catch=True):
+    """Process arguments and run the `doorstop reviewref` subcommand.
+
+    :param args: Namespace of CLI arguments
+    :param cwd: current working directory
+    :param error: function to call for CLI errors
+    :param catch: catch and log :class:`~doorstop.common.DoorstopError`
+
+    """
+    with utilities.capture(catch=catch) as success:
+
+        for item in _iter_items(args, cwd, error):
+            utilities.show("marking refs for item {} as reviewed...".format(item.uid))
+            item.reviewref(args.ref)
+
+    if not success:
+        return False
+
+    return True
 
 def run_import(args, cwd, error, catch=True, _tree=None):
     """Process arguments and run the `doorstop import` subcommand.
