@@ -875,10 +875,10 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
         # Search for the external reference
         log.debug("seraching for ref '{}'...".format(refname_start))
         pattern_start = r"(^|\b|\W)<{}>(\b|\W)".format(re.escape(refname_start))
-        pattern_start_version = r"(^|\b|\W)<{}.*>(\b|\W)".format(re.escape(refname))
+        pattern_start_version = r"(^|\b|\W)<{}_.+>(\b|\W)".format(re.escape(refname))
         pattern_end = r"(^|\b|\W)</{}>(\b|\W)".format(re.escape(refname_end))
         pattern_closed = r"(^|\b|\W)<{}\s*/>(\b|\W)".format(re.escape(refname_start))
-        pattern_closed_version = r"(^|\b|\W)<{}_.*\s*/>(\b|\W)".format(re.escape(refname))
+        pattern_closed_version = r"(^|\b|\W)<{}_.+/>(\b|\W)".format(re.escape(refname))
 
         regex_start  = re.compile(pattern_start)
         regex_start_version  = re.compile(pattern_start_version)
@@ -908,14 +908,13 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                     if regex_closed.search(line):
                         log.debug("found ref closed for '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = pattern_find_end_line = lineno
-                    #elif regex_closed_version.search(line):
-                    #    log.warning("found ref closed '{} with different version in {}:{}".format(refname, relpath, lineno))
-
-                    if regex_start.search(line):
+                    elif regex_closed_version.search(line):
+                        log.warning("found ref closed '{} with different version in {}:{}".format(refname_start, relpath, lineno))
+                    elif regex_start.search(line):
                         log.debug("found ref start '{}' in {}:{}".format(refname_start,relpath,lineno))
                         pattern_find_start_line = lineno
-                    #elif regex_start_version.search(line):
-                    #    log.warning("found ref start '{} with different version in {}:{}".format(refname, relpath, lineno))
+                    elif regex_start_version.search(line):
+                        log.warning("found ref start '{} with different version in {}:{}".format(refname_start, relpath, lineno))
 
                 # start pattern found, not implemented as else because
                 if pattern_find_start_line:
@@ -931,7 +930,7 @@ class Item(BaseValidatable, BaseFileObject):  # pylint: disable=R0902
                     return relpath, pattern_find_start_line, Stamp(Stamp.digest(pattern_find_content))
 
             if pattern_find_start_line and not pattern_find_end_line:
-                raise DoorstopError("Stop pattern for reference '{}' not found".format(refname_start))
+                raise DoorstopError("Stop pattern for reference '{}' in {}:{} not found i".format(refname_start, relpath, lineno))
 
         msg = "external hash reference not found: {}".format(refname_start)
         raise DoorstopError(msg)
